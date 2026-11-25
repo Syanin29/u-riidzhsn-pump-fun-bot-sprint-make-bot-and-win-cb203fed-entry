@@ -27,10 +27,29 @@ DEFAULT = {
     'early_max_open': 5,
 }
 
+def _validate_params(p):
+    """Reject parameter sets that contradict the strategy's own design notes.
+
+    The chase leg only makes sense between the probe floor and graduation
+    (~85 SOL of real reserves); a chase stake above the harness 1%-of-real-
+    reserves cap at the trigger would be silently clipped by the sim, so the
+    configured stake must already fit it; stops, trail arms and trail-backs
+    are fractions of cost and must lie strictly inside (0, 1); and the early
+    sleeve must leave at least one of the shared open slots for chases.
+    """
+    assert 0 < p['early_min_real'] < p['chase_thr'] < 85.0, 'chase threshold must sit above the probe floor and below graduation (~85 SOL)'
+    assert 0 < p['chase_stake'] <= 0.01 * p['chase_thr'], 'chase stake must fit the 1% reserve cap at the trigger'
+    for sleeve in ('early', 'chase'):
+        assert 0 < p[sleeve + '_stop'] < 1, sleeve + ' stop must be a fraction strictly inside (0, 1)'
+        assert 0 < p[sleeve + '_trail_arm'] < 1, sleeve + ' trail arm must be a fraction strictly inside (0, 1)'
+        assert 0 < p[sleeve + '_trail'] < 1, sleeve + ' trail-back must be a fraction strictly inside (0, 1)'
+    assert 0 < p['early_max_open'] <= p['max_open'], 'early sleeve must leave at least one shared slot for chases'
+
 class Strategy:
     def __init__(self, params=None):
         self.p = dict(DEFAULT)
         if params: self.p.update(params)
+        _validate_params(self.p)
         self.coins = {}   # mint -> feature dict
         self.bought = set()
         self.pos = {}     # mint -> {'cost': lamports, 'tokens': int, 'slot': int, 'sleeve': str, 'peak': float, 'armed': bool}
